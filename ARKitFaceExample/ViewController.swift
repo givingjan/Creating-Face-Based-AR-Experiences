@@ -10,6 +10,20 @@ import SceneKit
 import UIKit
 
 class ViewController: UIViewController, ARSessionDelegate {
+    // MARK: Render
+    var renderer: SCNRenderer!
+    var scene2: SCNScene!
+    var presentScnView: SCNView!
+    var plane: SCNGeometry!
+    var device:MTLDevice!
+    var commandQueue: MTLCommandQueue!
+    var offscreenTexture:MTLTexture!
+    let rgbColorSpace = CGColorSpaceCreateDeviceRGB()
+    let bytesPerPixel = Int(4)
+    let bitsPerComponent = Int(8)
+    let bitsPerPixel:Int = 32
+    var textureSizeX:Int = 360 * 3
+    var textureSizeY:Int = 640 * 3
     
     // MARK: Outlets
 
@@ -57,6 +71,8 @@ class ViewController: UIViewController, ARSessionDelegate {
         statusViewController.restartExperienceHandler = { [unowned self] in
             self.restartExperience()
         }
+        
+        setupRenderConfiguration()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -79,6 +95,142 @@ class ViewController: UIViewController, ARSessionDelegate {
     
     // MARK: - Setup
     
+    func setupRenderConfiguration() {
+        scene2 = SCNScene()
+        presentScnView = SCNView(frame: .zero)
+        plane = SCNPlane(width: 10, height: 10)
+        let planeNode = SCNNode(geometry: plane)
+//        scene2.rootNode.addChildNode(planeNode)
+        
+        presentScnView.scene = scene2
+        setupMetal()
+        setupTexture()
+        self.view.addSubview(presentScnView)
+        presentScnView.frame = CGRect(x: 30, y: 30, width: 360, height: 640)
+//        plane.materials.first?.diffuse.contents = offscreenTexture
+        let box = SCNBox(width: 3.6, height: 6.4, length: 5, chamferRadius: 0.5)
+        scene2.rootNode.addChildNode(SCNNode(geometry: box))
+        box.materials.first?.diffuse.contents = offscreenTexture
+        
+        presentScnView.isPlaying = true
+        presentScnView.allowsCameraControl = true
+        sceneView.isPlaying = true
+        
+    }
+    
+    func doRender() {
+        //rendering to a MTLTexture, so the viewport is the size of this texture
+        let viewport = CGRect(x: 0, y: 0, width: CGFloat(textureSizeX), height: CGFloat(textureSizeY))
+        
+        //write to offscreenTexture, clear the texture before rendering using green, store the result
+        let renderPassDescriptor = MTLRenderPassDescriptor()
+        renderPassDescriptor.colorAttachments[0].texture = offscreenTexture
+        renderPassDescriptor.colorAttachments[0].loadAction = .clear
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColorMake(1.0, 1.0, 1.0, 1.0); //green
+        renderPassDescriptor.colorAttachments[0].storeAction = .store
+
+        let commandBuffer = commandQueue.makeCommandBuffer()!
+        // reuse scene1 and the current point of view
+        renderer.scene = sceneView.scene
+        renderer.pointOfView = sceneView.pointOfView
+        renderer.render(atTime: 0, viewport: viewport, commandBuffer: commandBuffer, passDescriptor: renderPassDescriptor)
+
+        commandBuffer.commit()
+        
+        var outPixelbuffer: CVPixelBuffer?
+        if let datas = offscreenTexture.buffer?.contents() {
+            CVPixelBufferCreateWithBytes(kCFAllocatorDefault, offscreenTexture.width,
+                                         offscreenTexture.height, kCVPixelFormatType_64RGBAHalf, datas,
+                                         offscreenTexture.bufferBytesPerRow, nil, nil, nil, &outPixelbuffer);
+        }
+
+    }
+    
+    func setupMetal() {
+        if let defaultMtlDevice = MTLCreateSystemDefaultDevice() {
+            device = defaultMtlDevice
+            commandQueue = device.makeCommandQueue()
+            renderer = SCNRenderer(device: device, options: nil)
+        } else {
+            fatalError("iOS simulator does not support Metal, this example can only be run on a real device.")
+        }
+    }
+    
+    func setupTexture() {
+        
+        var rawData0 = [UInt8](repeating: 0, count: Int(textureSizeX) * Int(textureSizeY) * 4)
+        
+        let bytesPerRow = 4 * Int(textureSizeX)
+        let bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
+        
+        let context = CGContext(data: &rawData0, width: Int(textureSizeX), height: Int(textureSizeY), bitsPerComponent: bitsPerComponent, bytesPerRow: bytesPerRow, space: rgbColorSpace, bitmapInfo: bitmapInfo)!
+        context.setFillColor(UIColor.green.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: CGFloat(textureSizeX), height: CGFloat(textureSizeY)))
+
+        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: MTLPixelFormat.rgba8Unorm, width: Int(textureSizeX), height: Int(textureSizeY), mipmapped: false)
+        
+        textureDescriptor.usage = MTLTextureUsage(rawValue: MTLTextureUsage.renderTarget.rawValue | MTLTextureUsage.shaderRead.rawValue)
+        
+        let textureA = device.makeTexture(descriptor: textureDescriptor)!
+        
+        let region = MTLRegionMake2D(0, 0, Int(textureSizeX), Int(textureSizeY))
+        textureA.replace(region: region, mipmapLevel: 0, withBytes: &rawData0, bytesPerRow: Int(bytesPerRow))
+
+        offscreenTexture = textureA
+    }
+    
+    func makeBGRACoreVideoTexture(size: CGSize, pixelBuffer: CVPixelBuffer) {
+        
+    }
+
+//    - (id<MTLTexture>) makeBGRACoreVideoTexture:(CGSize)size
+//                            cvPixelBufferRefPtr:(CVPixelBufferRef*)cvPixelBufferRefPtr
+//    {
+//      int width = (int) size.width;
+//      int height = (int) size.height;
+//
+//      // CoreVideo pixel buffer backing the indexes texture
+//
+//      NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:
+//                               [NSNumber numberWithBool:YES], kCVPixelBufferMetalCompatibilityKey,
+//                               [NSNumber numberWithBool:YES], kCVPixelBufferCGImageCompatibilityKey,
+//                               [NSNumber numberWithBool:YES], kCVPixelBufferCGBitmapContextCompatibilityKey,
+//                               nil];
+//
+//      CVPixelBufferRef pxbuffer = NULL;
+//
+//      CVReturn status = CVPixelBufferCreate(kCFAllocatorDefault,
+//                                            width,
+//                                            height,
+//                                            kCVPixelFormatType_32BGRA,
+//                                            (__bridge CFDictionaryRef) options,
+//                                            &pxbuffer);
+//
+//      NSParameterAssert(status == kCVReturnSuccess && pxbuffer != NULL);
+//
+//      *cvPixelBufferRefPtr = pxbuffer;
+//
+//      CVMetalTextureRef cvTexture = NULL;
+//
+//      CVReturn ret = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault,
+//                                                               _textureCache,
+//                                                               pxbuffer,
+//                                                               nil,
+//                                                               MTLPixelFormatBGRA8Unorm,
+//                                                               CVPixelBufferGetWidth(pxbuffer),
+//                                                               CVPixelBufferGetHeight(pxbuffer),
+//                                                               0,
+//                                                               &cvTexture);
+//
+//      NSParameterAssert(ret == kCVReturnSuccess && cvTexture != NULL);
+//
+//      id<MTLTexture> metalTexture = CVMetalTextureGetTexture(cvTexture);
+//
+//      CFRelease(cvTexture);
+//
+//      return metalTexture;
+//    }
+
     /// - Tag: CreateARSCNFaceGeometry
     func createFaceGeometry() {
         // This relies on the earlier check of `ARFaceTrackingConfiguration.isSupported`.
@@ -136,7 +288,11 @@ class ViewController: UIViewController, ARSessionDelegate {
         configuration.isLightEstimationEnabled = true
         session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
     }
-
+    
+    func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        doRender()
+    }
+    
     // MARK: - Interface Actions
 
     /// - Tag: restartExperience
