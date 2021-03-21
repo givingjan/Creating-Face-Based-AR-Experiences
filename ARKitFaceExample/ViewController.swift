@@ -22,9 +22,11 @@ class ViewController: UIViewController, ARSessionDelegate {
     let bytesPerPixel = Int(4)
     let bitsPerComponent = Int(8)
     let bitsPerPixel:Int = 32
-    var textureSizeX:Int = 360 * 3
-    var textureSizeY:Int = 640 * 3
-    
+    var textureSizeX:Int = 720
+    var textureSizeY:Int = 1280
+    var pixelBuffer: CVPixelBuffer?
+    var textureCache: CVMetalTextureCache?
+    var imageView: UIImageView = UIImageView(frame: CGRect(x: 30, y: 30, width: 360/2.0, height: 640/2.0))
     // MARK: Outlets
 
     @IBOutlet var sceneView: ARSCNView!
@@ -99,15 +101,12 @@ class ViewController: UIViewController, ARSessionDelegate {
         scene2 = SCNScene()
         presentScnView = SCNView(frame: .zero)
         plane = SCNPlane(width: 10, height: 10)
-        let planeNode = SCNNode(geometry: plane)
-//        scene2.rootNode.addChildNode(planeNode)
-        
         presentScnView.scene = scene2
         setupMetal()
-        setupTexture()
+        createTexture()
+
         self.view.addSubview(presentScnView)
         presentScnView.frame = CGRect(x: 30, y: 30, width: 360, height: 640)
-//        plane.materials.first?.diffuse.contents = offscreenTexture
         let box = SCNBox(width: 3.6, height: 6.4, length: 5, chamferRadius: 0.5)
         scene2.rootNode.addChildNode(SCNNode(geometry: box))
         box.materials.first?.diffuse.contents = offscreenTexture
@@ -116,9 +115,33 @@ class ViewController: UIViewController, ARSessionDelegate {
         presentScnView.allowsCameraControl = true
         sceneView.isPlaying = true
         
+        
+        view.addSubview(imageView)
     }
     
+//    public func setupPixelBuffer() {
+//        let attributes = [
+//            kCVPixelBufferCGImageCompatibilityKey : kCFBooleanTrue,
+//            kCVPixelBufferCGBitmapContextCompatibilityKey : kCFBooleanTrue
+//        ]
+//
+//        let status = CVPixelBufferCreate(kCFAllocatorDefault,
+//                                         textureSizeX,
+//                                         textureSizeY,
+//                                         kCVPixelFormatType_32ARGB,
+//                                         attributes as CFDictionary,
+//                                         &pixelBuffer)
+//
+//        if status == kCVReturnSuccess {
+//            print("create pixelBuffer success")
+//        }
+//
+//
+//    }
+
+    
     func doRender() {
+        
         //rendering to a MTLTexture, so the viewport is the size of this texture
         let viewport = CGRect(x: 0, y: 0, width: CGFloat(textureSizeX), height: CGFloat(textureSizeY))
         
@@ -136,14 +159,21 @@ class ViewController: UIViewController, ARSessionDelegate {
         renderer.render(atTime: 0, viewport: viewport, commandBuffer: commandBuffer, passDescriptor: renderPassDescriptor)
 
         commandBuffer.commit()
-        
-        var outPixelbuffer: CVPixelBuffer?
-        if let datas = offscreenTexture.buffer?.contents() {
-            CVPixelBufferCreateWithBytes(kCFAllocatorDefault, offscreenTexture.width,
-                                         offscreenTexture.height, kCVPixelFormatType_64RGBAHalf, datas,
-                                         offscreenTexture.bufferBytesPerRow, nil, nil, nil, &outPixelbuffer);
+        if let pixelBuffer = pixelBuffer {
+            imageView.image = UIImage(pixelBuffer: pixelBuffer)
         }
-
+        
+//
+//        // copy data to pixelBuffer
+//        guard let pixelBufferBytes = CVPixelBufferGetBaseAddress(pixelBuffer!) else {
+//            print("can not get buffer bytes")
+//            return
+//        }
+//
+//        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer!)
+//        let region = MTLRegionMake2D(0, 0, textureSizeX, textureSizeY)
+//        offscreenTexture.getBytes(pixelBufferBytes, bytesPerRow: bytesPerRow, from: region, mipmapLevel: 0)
+//        print("1")
     }
     
     func setupMetal() {
@@ -156,6 +186,59 @@ class ViewController: UIViewController, ARSessionDelegate {
         }
     }
     
+    func createTexture() {
+        // 1. Create CVPixelBuffer (將與MLTexture綁定)
+        let attributes = [
+            kCVPixelBufferCGImageCompatibilityKey : kCFBooleanTrue,
+            kCVPixelBufferCGBitmapContextCompatibilityKey : kCFBooleanTrue,
+            kCVPixelBufferMetalCompatibilityKey: kCFBooleanTrue
+        ]
+
+        let status = CVPixelBufferCreate(kCFAllocatorDefault,
+                                         textureSizeX,
+                                         textureSizeY,
+                                         kCVPixelFormatType_32BGRA,
+                                         attributes as CFDictionary,
+                                         &pixelBuffer)
+        
+        if status != kCVReturnSuccess {
+            print("create pixelBuffer failed: \(status)")
+        }
+        
+        // 2. Create MTLTextureCache (宣告一塊快取區域)
+        CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &textureCache)
+        var cvTexture: CVMetalTexture?
+        let ret = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault,textureCache!,pixelBuffer!,nil,.bgra8Unorm_srgb,textureSizeX,textureSizeY,0,&cvTexture)
+        let texute = CVMetalTextureGetTexture(cvTexture!)
+        offscreenTexture = texute
+    }
+    
+//    - (id<MTLTexture>) makeBGRACoreVideoTexture:(CGSize)size
+//                            cvPixelBufferRefPtr:(CVPixelBufferRef*)cvPixelBufferRefPtr
+//    {
+//
+//      *cvPixelBufferRefPtr = pxbuffer;
+//
+//      CVMetalTextureRef cvTexture = NULL;
+//
+//      CVReturn ret = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault,
+//                                                               _textureCache,
+//                                                               pxbuffer,
+//                                                               nil,
+//                                                               MTLPixelFormatBGRA8Unorm,
+//                                                               CVPixelBufferGetWidth(pxbuffer),
+//                                                               CVPixelBufferGetHeight(pxbuffer),
+//                                                               0,
+//                                                               &cvTexture);
+//
+//      NSParameterAssert(ret == kCVReturnSuccess && cvTexture != NULL);
+//
+//      id<MTLTexture> metalTexture = CVMetalTextureGetTexture(cvTexture);
+//
+//      CFRelease(cvTexture);
+//
+//      return metalTexture;
+
     func setupTexture() {
         
         var rawData0 = [UInt8](repeating: 0, count: Int(textureSizeX) * Int(textureSizeY) * 4)

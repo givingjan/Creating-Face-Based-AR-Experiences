@@ -172,7 +172,7 @@
 				TargetAttributes = {
 					3929C4871E89EC2C00E00B60 = {
 						CreatedOnToolsVersion = 9.0;
-						DevelopmentTeam = 67Y529NW4D;
+						DevelopmentTeam = 6Y9BHBZQHR;
 						LastSwiftMigration = 0900;
 						ProvisioningStyle = Automatic;
 					};
@@ -350,10 +350,10 @@
 				CODE_SIGN_IDENTITY = "-";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 67Y529NW4D;
+				DEVELOPMENT_TEAM = 6Y9BHBZQHR;
 				INFOPLIST_FILE = "$(SRCROOT)/ARKitFaceExample/Resources/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.ARKitFaceExample.jan";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.ARKitFaceExample.jann";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Default;
@@ -370,10 +370,10 @@
 				CODE_SIGN_IDENTITY = "-";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 67Y529NW4D;
+				DEVELOPMENT_TEAM = 6Y9BHBZQHR;
 				INFOPLIST_FILE = "$(SRCROOT)/ARKitFaceExample/Resources/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.ARKitFaceExample.jan";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.example.apple-samplecode.ARKitFaceExample.jann";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Default;
